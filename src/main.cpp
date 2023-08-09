@@ -25,7 +25,7 @@ glm::mat4 createViewMatrix(const Camera& camera) {
 
 void drawTriangle(const glm::vec3& v1, const glm::vec3& v2, const glm::vec3& v3) {
     // Crea una matriz de rotación
-    glm::mat4 rotation = glm::rotate(glm::mat4(0.9f), rotationAngle, glm::vec3(1.0f, 0.0f, 0.0f));
+    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), rotationAngle, glm::vec3(1.0f, 0.0f, 0.0f));
 
     // Aplica la rotación a los vértices
     glm::vec4 v1_rotated = rotation * glm::vec4(v1, 1.0f);
@@ -48,6 +48,7 @@ void drawTriangle(const glm::vec3& v1, const glm::vec3& v2, const glm::vec3& v3)
 
     SDL_SetRenderDrawColor(renderer, currentColor.r, currentColor.g, currentColor.b, currentColor.a);
 
+
     // Draw the first side of the triangle
     SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
     // Draw the second side of the triangle
@@ -56,25 +57,51 @@ void drawTriangle(const glm::vec3& v1, const glm::vec3& v2, const glm::vec3& v3)
     SDL_RenderDrawLine(renderer, x3, y3, x1, y1);
 }
 
-std::vector<Fragment> triangle(const glm::vec3& v1, const glm::vec3& v2, const glm::vec3& v3) {
+
+
+// Función para calcular la coordenada baricéntrica
+glm::vec3 barycentricCoordinate(const glm::vec2& p, const glm::vec3& a, const glm::vec3& b, const glm::vec3& c) {
+    glm::vec3 v0 = b - a, v1 = c - a, v2 = glm::vec3(p.x, p.y, 0) - a;
+    float d00 = glm::dot(v0, v0);
+    float d01 = glm::dot(v0, v1);
+    float d11 = glm::dot(v1, v1);
+    float d20 = glm::dot(v2, v0);
+    float d21 = glm::dot(v2, v1);
+    float denom = d00 * d11 - d01 * d01;
+    glm::vec3 w;
+    w.y = (d11 * d20 - d01 * d21) / denom;
+    w.z = (d00 * d21 - d01 * d20) / denom;
+    w.x = 1.0f - w.y - w.z;
+    return w;
+}
+
+std::vector<Fragment> triangle(const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2) {
     std::vector<Fragment> fragments;
 
-    // Convertir las coordenadas del modelo a coordenadas de pantalla
-    int x1 = (v1.x + 1) * SCREEN_WIDTH / 2;
-    int y1 = (v1.y + 1) * SCREEN_HEIGHT / 2;
-    int x2 = (v2.x + 1) * SCREEN_WIDTH / 2;
-    int y2 = (v2.y + 1) * SCREEN_HEIGHT / 2;
-    int x3 = (v3.x + 1) * SCREEN_WIDTH / 2;
-    int y3 = (v3.y + 1) * SCREEN_HEIGHT / 2;
+    // Encuentra el bounding box del triángulo
+    float minX = std::min({v0.x, v1.x, v2.x});
+    float maxX = std::max({v0.x, v1.x, v2.x});
+    float minY = std::min({v0.y, v1.y, v2.y});
+    float maxY = std::max({v0.y, v1.y, v2.y});
 
-    // Por ahora, simplemente agregamos los tres vértices del triángulo como fragmentos
-    fragments.push_back(Fragment(glm::ivec2(x1, y1)));
-    fragments.push_back(Fragment(glm::ivec2(x2, y2)));
-    fragments.push_back(Fragment(glm::ivec2(x3, y3)));
+    // Para cada píxel dentro del bounding box
+    for (float x = minX; x <= maxX; x++) {
+        for (float y = minY; y <= maxY; y++) {
+            // Calcula la barycentric coordinate para ver si el píxel está dentro del triángulo
+            glm::vec3 w = barycentricCoordinate(glm::vec2(x, y), v0, v1, v2);
+
+            // Si todas las coordenadas baricéntricas están en el rango [0, 1], el punto está dentro del triángulo
+            if (w.x >= 0 && w.x <= 1 && w.y >= 0 && w.y <= 1 && w.z >= 0 && w.z <= 1) {
+                Fragment frag;
+                frag.position.x = x;
+                frag.position.y = y;
+                fragments.push_back(frag);
+            }
+        }
+    }
 
     return fragments;
 }
-
 
 
 std::vector<glm::vec3> modelVertices;
@@ -82,25 +109,22 @@ std::vector<glm::vec3> modelVertices;
 
 
 
-// Primitive Assembly function
 std::vector<std::vector<glm::vec3>> primitiveAssembly(const std::vector<glm::vec3>& transformedVertices) {
-    std::vector<std::vector<glm::vec3>> groupedVertices;
+    std::vector<std::vector<glm::vec3>> assembled;
+
     for (size_t i = 0; i < transformedVertices.size(); i += 3) {
-        std::vector<glm::vec3> triangle = {transformedVertices[i], transformedVertices[i+1], transformedVertices[i+2]};
-        groupedVertices.push_back(triangle);
+        assembled.push_back({ transformedVertices[i], transformedVertices[i + 1], transformedVertices[i + 2] });
     }
-    return groupedVertices;
+
+    return assembled;
 }
+
 
 Color fragmentShader(const Fragment& fragment) {
-    // Ejemplo: Asignar un color constante a cada fragmento
-    Color fragColor(255, 0, 0, 255); // Color rojo con opacidad completa
-
-    // Puedes modificar esta función para implementar un sombreado más complejo
-    // basado en los atributos del fragmento (por ejemplo, profundidad, normales interpoladas, coordenadas de textura, etc.)
-
+    Color fragColor(255, 0, 0, 255); // Red color with full opacity
     return fragColor;
 }
+
 
 // Function to create a model matrix based on translation, rotation, and scale
 glm::mat4 createModelMatrix(const glm::vec3& translation, const glm::vec3& rotation, const glm::vec3& scale) {
@@ -123,15 +147,12 @@ glm::mat4 createModelMatrix(const glm::vec3& translation, const glm::vec3& rotat
 
 glm::mat4 createViewportMatrix() {
     glm::mat4 viewport = glm::mat4(1.0f);
-
-    // Scale
     viewport = glm::scale(viewport, glm::vec3(SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f, 0.5f));
-
-    // Translate
     viewport = glm::translate(viewport, glm::vec3(1.0f, 1.0f, 0.5f));
 
     return viewport;
 }
+
 
 // Vertex Shader function
 glm::vec3 vertexShader(const glm::vec3& vertex, const Uniforms& uniforms) {
@@ -160,15 +181,17 @@ std::vector<Fragment> rasterize(const std::vector<std::vector<glm::vec3>>& assem
     return fragments;
 }
 
+
 // Función para crear una matriz de proyección
 glm::mat4 createProjectionMatrix() {
     float fovInDegrees = 45.0f;
-    float aspectRatio = static_cast<float>(SCREEN_WIDTH) / static_cast<float>(SCREEN_HEIGHT);
+    float aspectRatio = SCREEN_WIDTH / SCREEN_HEIGHT;
     float nearClip = 0.1f;
     float farClip = 100.0f;
 
     return glm::perspective(glm::radians(fovInDegrees), aspectRatio, nearClip, farClip);
 }
+
 
 
 void render(const std::vector<glm::vec3>& vertices, const Uniforms& uniforms) {
@@ -178,26 +201,35 @@ void render(const std::vector<glm::vec3>& vertices, const Uniforms& uniforms) {
         transformedVertices.push_back(vertexShader(vertex, uniforms));
     }
 
+    std::cout << "transformedVertices: " << transformedVertices.size() << std::endl;
+
     // 2. Primitive Assembly
     auto groupedVertices = primitiveAssembly(transformedVertices);
 
+    std::cout << "groupedVertices: " << groupedVertices.size() << std::endl;
+
     // 3. Rasterization
     auto fragments = rasterize(groupedVertices);
+
+    std::cout << "fragments: " << fragments.size() << std::endl;
 
 
     // 4. Fragment Shader
     for (const auto& fragment : fragments) {
         Color pixelColor = fragmentShader(fragment);
+        SDL_SetRenderDrawColor(renderer, pixelColor.r, pixelColor.g, pixelColor.b, pixelColor.a);  // <-- Añade esta línea
         point(fragment.position.x, fragment.position.y); // Dibuja el píxel en la posición del fragmento
     }
 
-    for (size_t i = 0; i < vertices.size(); i += 3) {
-        drawTriangle(vertices[i], vertices[i+1], vertices[i+2]);
-    }
+    std::cout << "fragments: " << fragments.size() << std::endl;
+
 
     for (size_t i = 0; i < vertices.size(); i += 3) {
         drawTriangle(vertices[i], vertices[i+1], vertices[i+2]);
     }
+    SDL_GetError();
+
+    std::cout << "vertices: " << vertices.size() << std::endl;
 }
 
 std::vector<glm::vec3> setupVertexArray(const std::vector<glm::vec3>& vertices, const std::vector<Face>& faces)
