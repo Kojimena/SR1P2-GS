@@ -1,11 +1,14 @@
 #pragma once
 
-// Define a Color struct to hold the RGB values of a pixel
 struct Color {
     uint8_t r;
     uint8_t g;
     uint8_t b;
     uint8_t a;
+
+    // Constructor que acepta valores RGB y A
+    Color(uint8_t red, uint8_t green, uint8_t blue, uint8_t alpha)
+            : r(red), g(green), b(blue), a(alpha) {}
 };
 
 SDL_Window* window = nullptr;
